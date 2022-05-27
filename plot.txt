@@ -1,0 +1,143 @@
+#Modification History: Date: 16th April, 2022
+
+import csv
+import os
+from pathlib import Path
+
+import math
+import matplotlib.pyplot as plt
+import numpy as np
+
+#ROUNDING_FACTOR = 5             # (not required for eigen values) I am considering up to 5 digits to compare data
+x_h_lim = 200                   # This is the x axis range max limit
+increment_factor = 0.01         # The x axis increment
+width = 0.5                     # Gausssian width
+electronic_charge = 1      # The value of 'e'
+
+def get_gaussian(width, x, eig):
+    # Gaussian normalization factor
+    normalizer = (1 / (width * math.sqrt(2 * math.pi)))
+    # Calculating the exponential value
+    exp_val = - ((x - eig) ** 2) / (2 * (width ** 2))
+
+    gaussian = normalizer * math.exp(exp_val)
+    ####We don't need Delta & it's condition in the equation at all
+    # if delta is 1, we're dividing gaussian by eig squared
+    # if round(eig, ROUNDING_FACTOR) == round(ec_ev_eig, ROUNDING_FACTOR):
+    #     gaussian = gaussian/(eig ** 2)
+    ####not required!!!
+    return gaussian
+
+def get_dip_summation(x, data_len, spacing, eig_data, dip_data):
+    dip_sum = 0
+
+
+    for i in range(data_len):
+        #ec_ev_eig = (float(ec_data[i]) - float(ev_data[i]))
+        eig = eig_data[i]
+
+        #### NO NEED OF DELTA, EC-EV Data#############
+        ###
+        #delta = 1
+
+        # Delta is 0 if eig value doesn't match the ec-ev
+        # We're rounding because of the inconsistency in data file for number of decimal places.
+        # Assuming 1.66667 == 1.66666666
+        # Precision level can be adjusted by tweaking the ROUNDING FACTOR
+        # if round(ec_ev_eig,ROUNDING_FACTOR) != round(eig, ROUNDING_FACTOR):
+        #     delta = 0
+
+        # Obtaining gaussian for x
+        gaussian = get_gaussian(spacing, x, eig)
+        # dip_ = dip * gaussian
+        dip_ = (dip_data[i] * gaussian)
+        # Summing up
+        #dip_sum = dip_sum + (dip_ * delta) ###DELTA isn't required###
+        dip_sum = dip_sum + dip_
+    return dip_sum
+
+
+def prepare_output():
+    base_path = Path(__file__).parent
+    op_dir = (base_path / "output").resolve()
+    fig_path = (base_path / f'output/eigen_values.png').resolve()
+    values_path = (base_path / f'output/values.csv').resolve()
+    os.makedirs(op_dir, exist_ok=True)
+    return fig_path, values_path
+
+
+def gen_plot(x_values, y_values):
+    fig_path, values_path = prepare_output()
+    # save x and y values to file
+    with open(values_path, 'w') as f:
+        writer = csv.writer(f, delimiter='\t')
+        writer.writerows(list(zip(x_values, y_values)))
+
+    plt.plot(x_values, y_values)
+    plt.ylabel('E')
+    plt.xlabel('X')
+    plt.title("Eigen values.")
+
+    # save graph img
+    plt.savefig(fig_path, dpi=100)
+
+    plt.show()
+
+
+if __name__ == "__main__":
+
+    data = np.loadtxt("eigenvalues_noeh.dat")
+    ec_data = data[0:, 4]
+    ev_data = data[0:, 5]
+    dip_data = data[0:, 7]
+    eig_data = data[0:, 6]
+    data_len = len(ec_data)
+
+    x_values = []
+    y_values = []
+
+    const = 16 * (math.pi ** 2) * (electronic_charge ** 2)
+
+    x = 0
+
+    for i in range(data_len):
+
+        # Trial: skipping all values of x, for which delta is 0
+        ####No NEED TO CHECK AS ALL "EIG" are equal to "EV" data####
+        # if round(eig_data[i], 5) != round((ec_data[i] - ev_data[i]), 5):
+        #     continue
+
+
+        # calculating the sum of dip values for x
+        # second param x_h_lim can be changed to data_len to sum for ALL transitions available in data file.
+        print("the value of x is: " + str(x))
+        dip_summation = get_dip_summation(x, x_h_lim, width, eig_data, dip_data)
+
+        # Required if we want to do 1/eig_squared outside of summation of dip
+        # eig_squared = eig_data[i] ** 2
+
+        #calculating e
+        ###THIS is our main Equation for Y axis-- e for E ###
+        e = const * dip_summation
+
+        # Appending to y values
+        y_values.append(e)
+        # Appending to x values
+        x_values.append(float(x))
+
+        # Debug
+        print(str(x) + " : " + str(e) + "\n")
+
+        # limiting our plotting to the limit
+        # changing upto data len
+        # if float(x) >= x_h_lim:
+        #     break
+
+        # Incrementing value of x
+        ###ROUNDING isn't required at all....
+        #x = round( (round(float(x),2) + increment_factor) , 3)
+        x = x + increment_factor
+
+    gen_plot(x_values, y_values)
+
+#################################END#############################################
